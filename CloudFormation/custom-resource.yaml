@@ -1,0 +1,371 @@
+{
+	"AWSTemplateFormatVersion": "2010-09-09",
+	"Description": "AWS CloudFormation Template for lambda.",
+	"Parameters": {
+		"S3Bucket": {
+			"Description": "The name of the bucket that contains your packaged source",
+			"Default": "vf-dict-data-load-bucket",
+			"Type": "String"
+		},
+		"S3KeyLambda": {
+			"Description": "The name of the ZIP package",
+			"Type": "String",
+			"Default": "VanityApp/vf-vanitynumber.zip"
+		},
+		"S3KeyContactFlow": {
+			"Description": "The name of the ZIP package",
+			"Type": "String",
+			"Default": "VanityApp/contactflowcustom.zip"
+		},
+		"S3KeyDictionary": {
+			"Description": "The name of the ZIP package",
+			"Type": "String",
+			"Default": "VanityApp/vf-dict-dataload.zip"
+		},  
+		"ConnectInstanceID": {
+			"Description": "ConnectInstanceID provisioned for the account",
+			"Type": "String",
+			"AllowedPattern": ".+",
+			"ConstraintDescription": "ConnectInstanceID is required"
+		},
+		"ResourceSuffix": {
+			"Type": "String",
+			"Default": "",
+			"Description": "Optional suffix to add each resource"
+		}
+	},
+	"Resources": {
+		"ResultsDynamoDBTableName": {
+			"Type": "AWS::DynamoDB::Table",
+			"Properties": {
+				"TableName": "vf-best-vanity-num",
+				"BillingMode": "PAY_PER_REQUEST",
+				"AttributeDefinitions": [{
+						"AttributeName": "callernum",
+						"AttributeType": "S"
+					},
+					{
+						"AttributeName": "id",
+						"AttributeType": "N"
+					}
+
+				],
+				"KeySchema": [{
+						"AttributeName": "callernum",
+						"KeyType": "HASH"
+					},
+					{
+						"AttributeName": "id",
+						"KeyType": "RANGE"
+					}
+				]
+			}
+		},
+        "DictionaryDataLoadFunction": {
+			"Type": "AWS::Lambda::Function",
+			"Properties": {
+				"Code": {
+					"S3Bucket": {
+						"Ref": "S3Bucket"
+					},
+					"S3Key": {
+						"Ref": "S3KeyDictionary"
+					}
+				},
+				"Role": {
+					"Fn::GetAtt": ["LambdaExecutionRole", "Arn"]
+				},
+				"Handler": "DictionaryLoad.lambda_handler",
+				"Runtime": "python3.9",
+				"Timeout": "30"
+			}
+		},
+		"ContactFlowCreate": {
+			"Type": "Custom::ContactFlowCreate",
+			"Properties": {
+				"ServiceToken": {
+					"Fn::GetAtt": ["ContactFlowLambdaFunction", "Arn"]
+				},
+				"ConnectInstanceID": {
+					"Ref": "ConnectInstanceID"
+				},
+				"VanityLambda": {
+					"Fn::GetAtt": ["VanityLambdaFunction", "Arn"]
+				}
+			}
+		},
+		"VanityLambdaFunction": {
+			"Type": "AWS::Lambda::Function",
+			"Properties": {
+				"Code": {
+					"S3Bucket": {
+						"Ref": "S3Bucket"
+					},
+					"S3Key": {
+						"Ref": "S3KeyLambda"
+					}
+				},
+				"Role": {
+					"Fn::GetAtt": ["LambdaExecutionRole", "Arn"]
+				},
+				"Handler": "lambda_function.lambda_handler",
+				"Runtime": "python3.9",
+				"Timeout": "30"
+			}
+		},
+		"ContactFlowLambdaFunction": {
+			"Type": "AWS::Lambda::Function",
+			"Properties": {
+				"Code": {
+					"S3Bucket": {
+						"Ref": "S3Bucket"
+					},
+					"S3Key": {
+						"Ref": "S3KeyContactFlow"
+					}
+				},
+				"Role": {
+					"Fn::GetAtt": [
+						"LambdaExecutionRole",
+						"Arn"
+					]
+				},
+				"Handler": "lambda_function.lambda_handler",
+				"Runtime": "python3.9",
+				"Timeout": "30"
+			}
+		},
+		"LambdaExecutionRole": {
+			"Type": "AWS::IAM::Role",
+			"Properties": {
+				"AssumeRolePolicyDocument": {
+					"Version": "2012-10-17",
+					"Statement": [{
+						"Effect": "Allow",
+						"Principal": {
+							"Service": [
+								"lambda.amazonaws.com",
+								"s3.amazonaws.com"
+							]
+						},
+						"Action": [
+							"sts:AssumeRole"
+						]
+					}]
+				},
+				"Path": "/",
+				"ManagedPolicyArns": [
+					"arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+					"arn:aws:iam::aws:policy/AWSLambdaInvocation-DynamoDB",
+					"arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
+				],
+				"Policies": [{
+						"PolicyName": "AWSLambdaBasicExecutionRole",
+						"PolicyDocument": {
+							"Version": "2012-10-17",
+							"Statement": [{
+								"Effect": "Allow",
+								"Action": [
+									"logs:CreateLogGroup",
+									"logs:CreateLogStream",
+									"logs:PutLogEvents"
+								],
+								"Resource": "*"
+							}]
+						}
+					},
+					{
+						"PolicyName": "AmazonS3FullAccess",
+						"PolicyDocument": {
+							"Version": "2012-10-17",
+							"Statement": [{
+								"Effect": "Allow",
+								"Action": "s3:*",
+								"Resource": [
+									"*"
+								]
+							}]
+						}
+					},
+					{
+						"PolicyName": "AmazonConnect_FullAccess",
+						"PolicyDocument": {
+							"Version": "2012-10-17",
+							"Statement": [{
+									"Effect": "Allow",
+									"Action": [
+										"connect:*",
+										"ds:CreateAlias",
+										"ds:AuthorizeApplication",
+										"ds:CreateIdentityPoolDirectory",
+										"ds:DeleteDirectory",
+										"ds:DescribeDirectories",
+										"ds:UnauthorizeApplication",
+										"firehose:DescribeDeliveryStream",
+										"firehose:ListDeliveryStreams",
+										"kinesis:DescribeStream",
+										"kinesis:ListStreams",
+										"kms:DescribeKey",
+										"kms:ListAliases",
+										"lex:GetBots",
+										"lex:ListBots",
+										"lex:ListBotAliases",
+										"logs:CreateLogGroup",
+										"s3:GetBucketLocation",
+										"s3:ListAllMyBuckets",
+										"lambda:ListFunctions",
+										"ds:CheckAlias",
+										"profile:ListAccountIntegrations",
+										"profile:GetDomain",
+										"profile:ListDomains",
+										"profile:GetProfileObjectType",
+										"profile:ListProfileObjectTypeTemplates"
+									],
+									"Resource": "*"
+								},
+								{
+									"Effect": "Allow",
+									"Action": [
+										"profile:AddProfileKey",
+										"profile:CreateDomain",
+										"profile:CreateProfile",
+										"profile:DeleteDomain",
+										"profile:DeleteIntegration",
+										"profile:DeleteProfile",
+										"profile:DeleteProfileKey",
+										"profile:DeleteProfileObject",
+										"profile:DeleteProfileObjectType",
+										"profile:GetIntegration",
+										"profile:GetMatches",
+										"profile:GetProfileObjectType",
+										"profile:ListIntegrations",
+										"profile:ListProfileObjects",
+										"profile:ListProfileObjectTypes",
+										"profile:ListTagsForResource",
+										"profile:MergeProfiles",
+										"profile:PutIntegration",
+										"profile:PutProfileObject",
+										"profile:PutProfileObjectType",
+										"profile:SearchProfiles",
+										"profile:TagResource",
+										"profile:UntagResource",
+										"profile:UpdateDomain",
+										"profile:UpdateProfile"
+									],
+									"Resource": "arn:aws:profile:*:*:domains/amazon-connect-*"
+								},
+								{
+									"Effect": "Allow",
+									"Action": [
+										"s3:CreateBucket",
+										"s3:GetBucketAcl"
+									],
+									"Resource": "arn:aws:s3:::amazon-connect-*"
+								},
+								{
+									"Effect": "Allow",
+									"Action": [
+										"servicequotas:GetServiceQuota"
+									],
+									"Resource": "arn:aws:servicequotas:*:*:connect/*"
+								},
+								{
+									"Effect": "Allow",
+									"Action": "iam:CreateServiceLinkedRole",
+									"Resource": "*",
+									"Condition": {
+										"StringEquals": {
+											"iam:AWSServiceName": "connect.amazonaws.com"
+										}
+									}
+								},
+								{
+									"Effect": "Allow",
+									"Action": "iam:DeleteServiceLinkedRole",
+									"Resource": "arn:aws:iam::*:role/aws-service-role/connect.amazonaws.com/AWSServiceRoleForAmazonConnect*"
+								}
+							]
+						}
+					},
+					{
+						"PolicyName": "AmazonDynamoDBFullAccess",
+						"PolicyDocument": {
+							"Version": "2012-10-17",
+							"Statement": [{
+									"Action": [
+										"dynamodb:*",
+										"dax:*",
+										"application-autoscaling:DeleteScalingPolicy",
+										"application-autoscaling:DeregisterScalableTarget",
+										"application-autoscaling:DescribeScalableTargets",
+										"application-autoscaling:DescribeScalingActivities",
+										"application-autoscaling:DescribeScalingPolicies",
+										"application-autoscaling:PutScalingPolicy",
+										"application-autoscaling:RegisterScalableTarget",
+										"cloudwatch:DeleteAlarms",
+										"cloudwatch:DescribeAlarmHistory",
+										"cloudwatch:DescribeAlarms",
+										"cloudwatch:DescribeAlarmsForMetric",
+										"cloudwatch:GetMetricStatistics",
+										"cloudwatch:ListMetrics",
+										"cloudwatch:PutMetricAlarm",
+										"cloudwatch:GetMetricData",
+										"iam:GetRole",
+										"iam:ListRoles",
+										"lambda:CreateFunction",
+										"lambda:ListFunctions",
+										"lambda:ListEventSourceMappings",
+										"lambda:CreateEventSourceMapping",
+										"lambda:DeleteEventSourceMapping",
+										"lambda:GetFunctionConfiguration",
+										"lambda:DeleteFunction"
+									],
+									"Effect": "Allow",
+									"Resource": "*"
+								},
+								{
+									"Action": "cloudwatch:GetInsightRuleReport",
+									"Effect": "Allow",
+									"Resource": "arn:aws:cloudwatch:*:*:insight-rule/DynamoDBContributorInsights*"
+								},
+								{
+									"Action": [
+										"iam:PassRole"
+									],
+									"Effect": "Allow",
+									"Resource": "*",
+									"Condition": {
+										"StringLike": {
+											"iam:PassedToService": [
+												"application-autoscaling.amazonaws.com",
+												"application-autoscaling.amazonaws.com.cn",
+												"dax.amazonaws.com"
+											]
+										}
+									}
+								},
+								{
+									"Effect": "Allow",
+									"Action": [
+										"iam:CreateServiceLinkedRole"
+									],
+									"Resource": "*",
+									"Condition": {
+										"StringEquals": {
+											"iam:AWSServiceName": [
+												"replication.dynamodb.amazonaws.com",
+												"dynamodb.application-autoscaling.amazonaws.com"
+											]
+										}
+									}
+								}
+							]
+						}
+					}
+				]
+			}
+		}
+	},
+	"Outputs": {
+			}
+		}
