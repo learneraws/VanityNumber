@@ -1,31 +1,25 @@
 {
 	"AWSTemplateFormatVersion": "2010-09-09",
-	"Description": "AWS CloudFormation Template for lambda.",
+	"Description": "Cloud Formation Template for Vanity application.",
 	"Parameters": {
 		"S3Bucket": {
 			"Description": "The name of the bucket that contains your packaged source",
-			"Default": "vf-dict-data-load-bucket",
+			"Default": "vf-vanitynum-incoming",
 			"Type": "String"
 		},
 		"S3KeyLambda": {
 			"Description": "The name of the ZIP package",
 			"Type": "String",
-			"Default": "VanityApp/vf-vanitynumber.zip"
+			"Default": "LambdaCode/vf-vanitynumber.zip"
 		},
 		"S3KeyContactFlow": {
 			"Description": "The name of the ZIP package",
 			"Type": "String",
-			"Default": "VanityApp/contactflowcustom.zip"
+			"Default": "LambdaCode/vf-contactflowcustom.zip"
 		},
-		"S3KeyDictionary": {
-			"Description": "The name of the ZIP package",
-			"Type": "String",
-			"Default": "VanityApp/vf-dict-dataload.zip"
-		},  
 		"ConnectInstanceID": {
 			"Description": "ConnectInstanceID provisioned for the account",
 			"Type": "String",
-			"AllowedPattern": ".+",
 			"ConstraintDescription": "ConnectInstanceID is required"
 		},
 		"ResourceSuffix": {
@@ -59,25 +53,6 @@
 						"KeyType": "RANGE"
 					}
 				]
-			}
-		},
-        "DictionaryDataLoadFunction": {
-			"Type": "AWS::Lambda::Function",
-			"Properties": {
-				"Code": {
-					"S3Bucket": {
-						"Ref": "S3Bucket"
-					},
-					"S3Key": {
-						"Ref": "S3KeyDictionary"
-					}
-				},
-				"Role": {
-					"Fn::GetAtt": ["LambdaExecutionRole", "Arn"]
-				},
-				"Handler": "DictionaryLoad.lambda_handler",
-				"Runtime": "python3.9",
-				"Timeout": "30"
 			}
 		},
 		"ContactFlowCreate": {
@@ -133,6 +108,19 @@
 				"Handler": "lambda_function.lambda_handler",
 				"Runtime": "python3.9",
 				"Timeout": "30"
+			}
+		},
+		"LambdaInvokePermission": {
+			"Type": "AWS::Lambda::Permission",
+			"Properties": {
+				"Action": "lambda:InvokeFunction",
+				"FunctionName": {
+					"Fn::GetAtt": [
+						"VanityLambdaFunction",
+						"Arn"
+					]
+				},
+				"Principal": "connect.amazonaws.com"
 			}
 		},
 		"LambdaExecutionRole": {
@@ -310,15 +298,47 @@
 										"cloudwatch:ListMetrics",
 										"cloudwatch:PutMetricAlarm",
 										"cloudwatch:GetMetricData",
+										"datapipeline:ActivatePipeline",
+										"datapipeline:CreatePipeline",
+										"datapipeline:DeletePipeline",
+										"datapipeline:DescribeObjects",
+										"datapipeline:DescribePipelines",
+										"datapipeline:GetPipelineDefinition",
+										"datapipeline:ListPipelines",
+										"datapipeline:PutPipelineDefinition",
+										"datapipeline:QueryObjects",
+										"ec2:DescribeVpcs",
+										"ec2:DescribeSubnets",
+										"ec2:DescribeSecurityGroups",
 										"iam:GetRole",
 										"iam:ListRoles",
+										"kms:DescribeKey",
+										"kms:ListAliases",
+										"sns:CreateTopic",
+										"sns:DeleteTopic",
+										"sns:ListSubscriptions",
+										"sns:ListSubscriptionsByTopic",
+										"sns:ListTopics",
+										"sns:Subscribe",
+										"sns:Unsubscribe",
+										"sns:SetTopicAttributes",
 										"lambda:CreateFunction",
 										"lambda:ListFunctions",
 										"lambda:ListEventSourceMappings",
 										"lambda:CreateEventSourceMapping",
 										"lambda:DeleteEventSourceMapping",
 										"lambda:GetFunctionConfiguration",
-										"lambda:DeleteFunction"
+										"lambda:DeleteFunction",
+										"resource-groups:ListGroups",
+										"resource-groups:ListGroupResources",
+										"resource-groups:GetGroup",
+										"resource-groups:GetGroupQuery",
+										"resource-groups:DeleteGroup",
+										"resource-groups:CreateGroup",
+										"tag:GetResources",
+										"kinesis:ListStreams",
+										"kinesis:DescribeStream",
+										"kinesis:DescribeStreamSummary"
 									],
 									"Effect": "Allow",
 									"Resource": "*"
@@ -354,7 +374,10 @@
 										"StringEquals": {
 											"iam:AWSServiceName": [
 												"replication.dynamodb.amazonaws.com",
-												"dynamodb.application-autoscaling.amazonaws.com"
+												"dax.amazonaws.com",
+												"dynamodb.application-autoscaling.amazonaws.com",
+												"contributorinsights.dynamodb.amazonaws.com",
+												"kinesisreplication.dynamodb.amazonaws.com"
 											]
 										}
 									}
